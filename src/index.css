@@ -1,0 +1,148 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-rose-gold: #D4A574;
+  --color-rose-gold-light: #E8C9A0;
+  --color-rose-gold-dark: #B88B5C;
+  --color-cream: #FFF8F0;
+  --color-soft-pink: #F5D5D4;
+  --color-dark-brown: #3D2914;
+  --color-sage-green: #7BA17C;
+  --color-bg: #FFFBF7;
+  --color-card: #FFFFFF;
+  --color-border: #F0E6D8;
+  --color-text-primary: #3D2914;
+  --color-text-secondary: #8B7355;
+  --color-text-muted: #B8A88A;
+  --font-display: 'Cormorant Garamond', serif;
+  --font-body: 'Noto Sans SC', sans-serif;
+  --shadow-soft: 0 2px 12px rgba(212, 165, 116, 0.08);
+  --shadow-medium: 0 4px 24px rgba(212, 165, 116, 0.12);
+  --shadow-lift: 0 8px 32px rgba(212, 165, 116, 0.16);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  color: var(--color-text-primary);
+  letter-spacing: 0.02em;
+}
+
+/* Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-rose-gold-light);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-rose-gold);
+}
+
+/* Decorative line */
+.decorative-line {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-rose-gold) 20%, var(--color-rose-gold) 80%, transparent);
+}
+
+/* Gold gradient text */
+.gold-text {
+  background: linear-gradient(135deg, var(--color-rose-gold-light), var(--color-rose-gold), var(--color-rose-gold-dark));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Button styles */
+@layer components {
+  .btn-primary {
+    @apply bg-rose-gold text-white px-6 py-2.5 rounded-md font-medium transition-all duration-300 hover:bg-rose-gold-dark hover:shadow-lift hover:-translate-y-0.5 active:translate-y-0;
+  }
+
+  .btn-secondary {
+    @apply border border-rose-gold text-rose-gold px-6 py-2.5 rounded-md font-medium transition-all duration-300 hover:bg-rose-gold hover:text-white;
+  }
+
+  .btn-ghost {
+    @apply text-text-secondary px-4 py-2 rounded-md transition-all duration-300 hover:bg-border hover:text-text-primary;
+  }
+
+  .card {
+    @apply bg-card rounded-lg shadow-soft border border-border p-6 transition-all duration-300 hover:shadow-medium;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-md border border-border bg-white/70 text-text-primary placeholder:text-text-muted focus:outline-none focus:border-rose-gold focus:ring-2 focus:ring-rose-gold/20 transition-all duration-200;
+  }
+
+  .chip {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-soft-pink/40 text-rose-gold-dark;
+  }
+
+  .chip-green {
+    @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-sage-green/20 text-sage-green;
+  }
+}
+
+/* Marbled background */
+.marble-bg {
+  background-image: 
+    radial-gradient(ellipse at 20% 50%, rgba(212, 165, 116, 0.08) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(245, 213, 212, 0.1) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, rgba(123, 161, 124, 0.06) 0%, transparent 50%);
+}
+
+/* Grid pattern for seating editor */
+.seating-grid {
+  background-image:
+    linear-gradient(rgba(212, 165, 116, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(212, 165, 116, 0.08) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Timeline vertical line */
+.timeline-line {
+  position: absolute;
+  left: 12px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(to bottom, var(--color-rose-gold-light), var(--color-rose-gold), var(--color-rose-gold-light));
+}
+
+/* Loading shimmer */
+.shimmer {
+  background: linear-gradient(90deg, rgba(240, 230, 216, 0.4) 25%, rgba(240, 230, 216, 0.8) 50%, rgba(240, 230, 216, 0.4) 75%);
+  background-size: 1000px 100%;
+  animation: shimmer 2s linear infinite;
+}
