@@ -11,6 +11,10 @@ import {
   Plus,
   Search,
   XCircle,
+  Upload,
+  AlertTriangle,
+  CheckCircle,
+  List,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { type Guest, type RsvpStatus, type GuestRelation } from '@/types';
@@ -35,6 +39,10 @@ export default function Guests() {
   const [relationFilter, setRelationFilter] = useState<GuestRelation | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkPreview, setBulkPreview] = useState<Omit<Guest, 'id'>[]>([]);
+  const [bulkErrors, setBulkErrors] = useState<string[]>([]);
   const [newGuest, setNewGuest] = useState<Omit<Guest, 'id'>>({
     projectId: project.id,
     name: '',
@@ -73,6 +81,118 @@ export default function Guests() {
       dietaryNote: '',
     });
     setShowAddModal(false);
+  };
+
+  const parseBulkImport = (text: string) => {
+    const lines = text.split('\n').filter((line) => line.trim());
+    const newGuests: Omit<Guest, 'id'>[] = [];
+    const errors: string[] = [];
+    const seenNames = new Set<string>();
+    const existingNames = new Set(guests.map((g) => g.name));
+
+    lines.forEach((line, idx) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+
+      const parts = trimmed.split(/[,，\t|]/).map((s) => s.trim());
+      const [name, phoneOrRelation, relationOrPlus, plusStr] = parts;
+
+      if (!name || name.length === 0) {
+        errors.push(`第 ${idx + 1} 行：姓名为空，已跳过`);
+        return;
+      }
+
+      if (seenNames.has(name)) {
+        errors.push(`第 ${idx + 1} 行："${name}" 在导入列表中重复，已跳过`);
+        return;
+      }
+
+      if (existingNames.has(name)) {
+        errors.push(`第 ${idx + 1} 行："${name}" 已存在宾客列表中，已跳过`);
+        return;
+      }
+
+      let phone = '';
+      let relation: GuestRelation = 'both';
+      let relationLabel = '共同好友';
+      let plusOnes = 0;
+
+      if (phoneOrRelation) {
+        if (/^1[3-9]\d{9}$/.test(phoneOrRelation)) {
+          phone = phoneOrRelation;
+        } else {
+          const rel = parseRelation(phoneOrRelation);
+          relation = rel.relation;
+          relationLabel = rel.label;
+        }
+      }
+
+      if (relationOrPlus) {
+        const plusNum = parseInt(relationOrPlus);
+        if (!isNaN(plusNum) && plusNum >= 0) {
+          plusOnes = plusNum;
+        } else {
+          const rel = parseRelation(relationOrPlus);
+          relation = rel.relation;
+          relationLabel = rel.label;
+        }
+      }
+
+      if (plusStr) {
+        const plusNum = parseInt(plusStr);
+        if (!isNaN(plusNum) && plusNum >= 0) {
+          plusOnes = plusNum;
+        }
+      }
+
+      seenNames.add(name);
+      newGuests.push({
+        projectId: project.id,
+        name,
+        phone,
+        relation,
+        relationLabel,
+        plusOnes,
+        rsvpStatus: 'pending',
+        dietaryNote: '',
+      });
+    });
+
+    return { guests: newGuests, errors };
+  };
+
+  const parseRelation = (input: string): { relation: GuestRelation; label: string } => {
+    const s = input.trim();
+    const groomKeywords = ['男', '新郎', '男方', 'groom', '先生', '伴郎'];
+    const brideKeywords = ['女', '新娘', '女方', 'bride', '女士', '伴娘'];
+
+    if (groomKeywords.some((k) => s.includes(k))) {
+      return { relation: 'groom', label: s || '男方亲友' };
+    }
+    if (brideKeywords.some((k) => s.includes(k))) {
+      return { relation: 'bride', label: s || '女方亲友' };
+    }
+    return { relation: 'both', label: s || '共同好友' };
+  };
+
+  const handleBulkTextChange = (text: string) => {
+    setBulkText(text);
+    if (!text.trim()) {
+      setBulkPreview([]);
+      setBulkErrors([]);
+      return;
+    }
+    const result = parseBulkImport(text);
+    setBulkPreview(result.guests);
+    setBulkErrors(result.errors);
+  };
+
+  const handleBulkImport = () => {
+    bulkPreview.forEach((g) => addGuest(g));
+    setShowBulkModal(false);
+    setBulkText('');
+    setBulkPreview([]);
+    setBulkErrors([]);
   };
 
   return (
@@ -170,10 +290,19 @@ export default function Guests() {
               })}
             </div>
           </div>
-          <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2">
-            <UserPlus className="w-4 h-4" />
-            添加宾客
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowBulkModal(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              批量导入
+            </button>
+            <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2">
+              <UserPlus className="w-4 h-4" />
+              添加宾客
+            </button>
+          </div>
         </div>
       </div>
 
@@ -388,6 +517,166 @@ export default function Guests() {
                 <Plus className="w-4 h-4" />
                 添加宾客
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Import Modal */}
+      {showBulkModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-xl shadow-lift w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col animate-slide-up">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-display text-xl font-semibold flex items-center gap-2">
+                  <Upload className="w-5 h-5 text-rose-gold" />
+                  批量导入宾客
+                </h3>
+                <p className="text-sm text-text-muted mt-1">
+                  粘贴宾客名单，每行一位，格式：姓名,电话,关系,随行人数
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowBulkModal(false);
+                  setBulkText('');
+                  setBulkPreview([]);
+                  setBulkErrors([]);
+                }}
+                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-border transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div>
+                <label className="text-sm text-text-secondary mb-2 block">
+                  粘贴宾客名单
+                  <span className="text-text-muted ml-2">
+                    （支持逗号、Tab、竖线分隔，关系可填"男方"/"女方"/"共同"）
+                  </span>
+                </label>
+                <textarea
+                  value={bulkText}
+                  onChange={(e) => handleBulkTextChange(e.target.value)}
+                  rows={8}
+                  placeholder={
+                    '张三,13800138000,男方亲友,1\n李四,13900139000,女方同事,0\n王五,男方\n赵六,13700137000'
+                  }
+                  className="input-field font-mono text-sm resize-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-3 rounded-lg bg-sage-green/10 border border-sage-green/20">
+                  <div className="flex items-center gap-2 text-sage-green mb-1">
+                    <CheckCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">将导入</span>
+                  </div>
+                  <p className="font-display text-2xl font-bold text-sage-green">
+                    {bulkPreview.length}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-amber-50 border border-amber-200">
+                  <div className="flex items-center gap-2 text-amber-600 mb-1">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span className="text-sm font-medium">警告</span>
+                  </div>
+                  <p className="font-display text-2xl font-bold text-amber-600">
+                    {bulkErrors.length}
+                  </p>
+                </div>
+                <div className="p-3 rounded-lg bg-rose-gold/10 border border-rose-gold/20">
+                  <div className="flex items-center gap-2 text-rose-gold-dark mb-1">
+                    <List className="w-4 h-4" />
+                    <span className="text-sm font-medium">现有宾客</span>
+                  </div>
+                  <p className="font-display text-2xl font-bold text-rose-gold-dark">
+                    {guests.length}
+                  </p>
+                </div>
+              </div>
+
+              {bulkErrors.length > 0 && (
+                <div className="p-4 rounded-lg bg-amber-50 border border-amber-200">
+                  <div className="flex items-center gap-2 text-amber-700 font-medium mb-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    以下行将被跳过
+                  </div>
+                  <ul className="text-xs text-amber-600 space-y-1 max-h-24 overflow-y-auto">
+                    {bulkErrors.map((err, i) => (
+                      <li key={i}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {bulkPreview.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-sage-green" />
+                    预览（前10条）
+                  </p>
+                  <div className="border border-border rounded-lg overflow-hidden max-h-48 overflow-y-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-cream/50 sticky top-0">
+                        <tr>
+                          <th className="text-left px-3 py-2 font-medium text-text-secondary">姓名</th>
+                          <th className="text-left px-3 py-2 font-medium text-text-secondary">电话</th>
+                          <th className="text-left px-3 py-2 font-medium text-text-secondary">关系</th>
+                          <th className="text-center px-3 py-2 font-medium text-text-secondary">随行</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {bulkPreview.slice(0, 10).map((g, i) => (
+                          <tr key={i}>
+                            <td className="px-3 py-1.5 text-text-primary">{g.name}</td>
+                            <td className="px-3 py-1.5 text-text-secondary">{g.phone || '-'}</td>
+                            <td className="px-3 py-1.5">
+                              <span className={cn('chip text-[10px]', relationColors[g.relation])}>
+                                {g.relationLabel}
+                              </span>
+                            </td>
+                            <td className="px-3 py-1.5 text-center text-text-secondary">
+                              {g.plusOnes > 0 ? `+${g.plusOnes}` : '-'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {bulkPreview.length > 10 && (
+                      <p className="text-xs text-text-muted text-center py-2 bg-cream/30">
+                        ...还有 {bulkPreview.length - 10} 位
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-border bg-bg">
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowBulkModal(false);
+                    setBulkText('');
+                    setBulkPreview([]);
+                    setBulkErrors([]);
+                  }}
+                  className="flex-1 btn-secondary"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleBulkImport}
+                  disabled={bulkPreview.length === 0}
+                  className="flex-1 btn-primary flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Check className="w-4 h-4" />
+                  导入 {bulkPreview.length} 位宾客
+                </button>
+              </div>
             </div>
           </div>
         </div>

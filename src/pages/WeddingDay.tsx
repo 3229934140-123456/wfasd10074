@@ -566,15 +566,15 @@ export default function WeddingDay() {
                   <Link className="w-4 h-4 text-text-muted flex-shrink-0" />
                   <code className="text-xs text-text-secondary flex-1 truncate font-mono">
                     {shareVendorId
-                      ? `${window.location.origin}/wedding-day?vendor=${shareVendorId}`
-                      : `${window.location.origin}/wedding-day`}
+                      ? `${window.location.origin}/share/timeline?vendor=${shareVendorId}`
+                      : `${window.location.origin}/share/timeline`}
                   </code>
                 </div>
                 <button
                   onClick={() => {
                     const link = shareVendorId
-                      ? `${window.location.origin}/wedding-day?vendor=${shareVendorId}`
-                      : `${window.location.origin}/wedding-day`;
+                      ? `${window.location.origin}/share/timeline?vendor=${shareVendorId}`
+                      : `${window.location.origin}/share/timeline`;
                     navigator.clipboard?.writeText(link);
                     setCopiedLink(true);
                     setTimeout(() => setCopiedLink(false), 2000);

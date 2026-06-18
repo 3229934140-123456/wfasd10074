@@ -228,68 +228,173 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Upcoming Todos */}
-        <div className="card col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-display text-lg font-semibold flex items-center gap-2">
-              <CalendarClock className="w-5 h-5 text-rose-gold" />
-              近期待办
-            </h3>
-            <div className="flex items-center gap-2">
-              {urgentTodos.length > 0 && (
-                <span className="chip !bg-red-100 !text-red-600 flex items-center gap-1">
-                  <AlertCircle className="w-3 h-3" />
-                  {urgentTodos.length} 项紧急
-                </span>
+        <div className="col-span-2 space-y-6">
+          {/* Upcoming Todos */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+                <CalendarClock className="w-5 h-5 text-rose-gold" />
+                近期待办
+              </h3>
+              <div className="flex items-center gap-2">
+                {urgentTodos.length > 0 && (
+                  <span className="chip !bg-red-100 !text-red-600 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3" />
+                    {urgentTodos.length} 项紧急
+                  </span>
+                )}
+                <button onClick={() => navigate('/timeline')} className="text-xs text-rose-gold hover:underline flex items-center gap-1">
+                  全部 <ChevronRight className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {pendingTodos.length === 0 ? (
+                <div className="text-center py-8 text-text-muted">
+                  <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-sage-green" />
+                  <p>太棒了！所有任务都已完成 🎉</p>
+                </div>
+              ) : (
+                pendingTodos.map((todo) => {
+                  const daysLeft = dayjs(todo.dueDate).diff(dayjs(), 'day');
+                  const isUrgent = daysLeft <= 14;
+                  return (
+                    <div
+                      key={todo.id}
+                      className="flex items-start gap-4 p-3 rounded-lg border border-border hover:bg-cream/50 transition-colors group"
+                    >
+                      <button className="mt-0.5 w-5 h-5 rounded-full border-2 border-rose-gold-light flex items-center justify-center flex-shrink-0 group-hover:border-rose-gold transition-colors">
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="font-medium text-text-primary">{todo.title}</p>
+                          <span className="chip !text-xs">{TODO_CATEGORY_LABELS[todo.category]}</span>
+                        </div>
+                        {todo.description && (
+                          <p className="text-xs text-text-muted truncate">{todo.description}</p>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span
+                          className={`text-xs flex items-center gap-1 ${
+                            isUrgent ? 'text-red-500' : daysLeft <= 30 ? 'text-rose-gold-dark' : 'text-text-muted'
+                          }`}
+                        >
+                          <Clock className="w-3 h-3" />
+                          {daysLeft > 0 ? `${daysLeft}天后` : daysLeft === 0 ? '今天' : `已过期${-daysLeft}天`}
+                        </span>
+                        {todo.priority === 'high' && (
+                          <span className="w-2 h-2 rounded-full bg-red-400" title="高优先级"></span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
               )}
-              <button onClick={() => navigate('/timeline')} className="text-xs text-rose-gold hover:underline flex items-center gap-1">
-                全部 <ChevronRight className="w-3 h-3" />
-              </button>
             </div>
           </div>
-          <div className="space-y-3">
-            {pendingTodos.length === 0 ? (
-              <div className="text-center py-8 text-text-muted">
-                <CheckCircle2 className="w-12 h-12 mx-auto mb-2 text-sage-green" />
-                <p>太棒了！所有任务都已完成 🎉</p>
-              </div>
-            ) : (
-              pendingTodos.map((todo) => {
-                const daysLeft = dayjs(todo.dueDate).diff(dayjs(), 'day');
-                const isUrgent = daysLeft <= 14;
+
+          {/* Upcoming Payments */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+                <FileCheck className="w-5 h-5 text-amber-500" />
+                即将到期付款
+              </h3>
+              <button onClick={() => navigate('/contracts?view=calendar')} className="text-xs text-rose-gold hover:underline flex items-center gap-1">
+                日历视图 <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+            {(() => {
+              const upcomingPayments: Array<{
+                id: string;
+                contractId: string;
+                vendorName: string;
+                vendorAvatar?: string;
+                type: string;
+                amount: number;
+                dueDate: string;
+                isOverdue: boolean;
+              }> = [];
+
+              contracts.forEach((c) => {
+                c.payments
+                  .filter((p) => p.status === 'pending' && dayjs(p.dueDate).diff(dayjs(), 'day') <= 14)
+                  .forEach((p) => {
+                    upcomingPayments.push({
+                      id: p.id,
+                      contractId: c.id,
+                      vendorName: c.vendorName,
+                      vendorAvatar: c.vendorAvatar,
+                      type: p.type,
+                      amount: p.amount,
+                      dueDate: p.dueDate,
+                      isOverdue: dayjs(p.dueDate).isBefore(dayjs(), 'day'),
+                    });
+                  });
+              });
+
+              upcomingPayments.sort((a, b) => dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf());
+
+              const paymentTypeLabels: Record<string, string> = {
+                deposit: '定金',
+                midterm: '中期款',
+                final: '尾款',
+              };
+
+              if (upcomingPayments.length === 0) {
                 return (
-                  <div
-                    key={todo.id}
-                    className="flex items-start gap-4 p-3 rounded-lg border border-border hover:bg-cream/50 transition-colors group"
-                  >
-                    <button className="mt-0.5 w-5 h-5 rounded-full border-2 border-rose-gold-light flex items-center justify-center flex-shrink-0 group-hover:border-rose-gold transition-colors">
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="font-medium text-text-primary">{todo.title}</p>
-                        <span className="chip !text-xs">{TODO_CATEGORY_LABELS[todo.category]}</span>
-                      </div>
-                      {todo.description && (
-                        <p className="text-xs text-text-muted truncate">{todo.description}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span
-                        className={`text-xs flex items-center gap-1 ${
-                          isUrgent ? 'text-red-500' : daysLeft <= 30 ? 'text-rose-gold-dark' : 'text-text-muted'
-                        }`}
-                      >
-                        <Clock className="w-3 h-3" />
-                        {daysLeft > 0 ? `${daysLeft}天后` : daysLeft === 0 ? '今天' : `已过期${-daysLeft}天`}
-                      </span>
-                      {todo.priority === 'high' && (
-                        <span className="w-2 h-2 rounded-full bg-red-400" title="高优先级"></span>
-                      )}
-                    </div>
+                  <div className="text-center py-6 text-text-muted">
+                    <CheckCircle2 className="w-10 h-10 mx-auto mb-2 text-sage-green" />
+                    <p className="text-sm">近期没有待付款项 🎉</p>
                   </div>
                 );
-              })
-            )}
+              }
+
+              return (
+                <div className="space-y-2">
+                  {upcomingPayments.slice(0, 4).map((p) => {
+                    const daysLeft = dayjs(p.dueDate).diff(dayjs(), 'day');
+                    return (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between p-3 rounded-lg bg-cream/30 border border-border hover:bg-cream/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={p.vendorAvatar}
+                            alt=""
+                            className="w-9 h-9 rounded-full object-cover"
+                          />
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-text-primary">
+                                {p.vendorName}
+                              </p>
+                              <span className="chip !text-[10px]">
+                                {paymentTypeLabels[p.type]}
+                              </span>
+                              {p.isOverdue && (
+                                <span className="chip !bg-red-100 !text-red-600 !text-[10px]">
+                                  已逾期
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-text-muted">
+                              到期日：{dayjs(p.dueDate).format('MM月DD日')}
+                              {!p.isOverdue && daysLeft >= 0 && `（还有${daysLeft}天）`}
+                            </p>
+                          </div>
+                        </div>
+                        <span className="font-display text-lg font-semibold text-rose-gold-dark">
+                          {formatMoney(p.amount)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>

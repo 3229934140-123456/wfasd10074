@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import Layout from '@/components/layout/Layout';
 import Login from '@/pages/Login';
 import Setup from '@/pages/Setup';
+import ShareTimeline from '@/pages/ShareTimeline';
 import Dashboard from '@/pages/Dashboard';
 import Vendors from '@/pages/Vendors';
 import VendorDetail from '@/pages/VendorDetail';
@@ -27,6 +28,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/setup" element={<Setup />} />
+        <Route path="/share/timeline" element={<ShareTimeline />} />
         <Route
           element={
             <RequireSetup>
