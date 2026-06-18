@@ -10,6 +10,7 @@ import {
   MapPin,
   Clock,
   Calendar,
+  AlertCircle,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { CATEGORY_LABELS } from '@/types';
@@ -18,7 +19,7 @@ import { formatMoney, formatDate } from '@/utils/date';
 export default function VendorDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { vendors } = useAppStore();
+  const { vendors, contracts, createContract } = useAppStore();
   const vendor = vendors.find((v) => v.id === id);
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
@@ -26,6 +27,12 @@ export default function VendorDetail() {
     vendor?.packages[0]?.id || null,
   );
   const [showSignModal, setShowSignModal] = useState(false);
+  const [signError, setSignError] = useState<string | null>(null);
+
+  const hasSignedPackage = (pkgId: string) =>
+    contracts.some(
+      (c) => c.vendorId === id && c.packageId === pkgId && c.status !== 'cancelled',
+    );
 
   if (!vendor) {
     return (
@@ -219,23 +226,31 @@ export default function VendorDetail() {
             <div className="space-y-3">
               {vendor.packages.map((pkg) => {
                 const isSelected = selectedPackage === pkg.id;
+                const isSigned = hasSignedPackage(pkg.id);
                 return (
                   <div
                     key={pkg.id}
-                    onClick={() => setSelectedPackage(pkg.id)}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-                      isSelected
-                        ? 'border-rose-gold bg-rose-gold/5'
-                        : 'border-border hover:border-rose-gold-light'
+                    onClick={() => !isSigned && setSelectedPackage(pkg.id)}
+                    className={`p-4 rounded-lg border-2 transition-all ${
+                      isSigned
+                        ? 'border-sage-green bg-sage-green/5 cursor-not-allowed opacity-75'
+                        : isSelected
+                        ? 'border-rose-gold bg-rose-gold/5 cursor-pointer'
+                        : 'border-border hover:border-rose-gold-light cursor-pointer'
                     }`}
                   >
                     <div className="flex items-start justify-between mb-2">
                       <h4 className="font-medium text-text-primary">{pkg.name}</h4>
-                      {isSelected && (
+                      {isSigned ? (
+                        <span className="px-2 py-0.5 rounded-full bg-sage-green/20 text-sage-green text-xs font-medium flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          已签约
+                        </span>
+                      ) : isSelected ? (
                         <span className="w-5 h-5 rounded-full bg-rose-gold flex items-center justify-center">
                           <Check className="w-3 h-3 text-white" />
                         </span>
-                      )}
+                      ) : null}
                     </div>
                     <p className="font-display text-xl font-semibold text-rose-gold-dark mb-3">
                       {formatMoney(pkg.price)}
@@ -254,11 +269,14 @@ export default function VendorDetail() {
             </div>
 
             <button
-              onClick={() => setShowSignModal(true)}
-              disabled={!selectedPackage}
+              onClick={() => {
+                setSignError(null);
+                setShowSignModal(true);
+              }}
+              disabled={!selectedPackage || hasSignedPackage(selectedPackage)}
               className="w-full btn-primary mt-6 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              立即签约
+              {selectedPackage && hasSignedPackage(selectedPackage) ? '该套餐已签约' : '立即签约'}
             </button>
             <p className="text-xs text-text-muted text-center mt-2">
               签约后将进入协议确认流程
@@ -323,21 +341,42 @@ export default function VendorDetail() {
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowSignModal(false)}
+                onClick={() => {
+                  setShowSignModal(false);
+                  setSignError(null);
+                }}
                 className="flex-1 btn-secondary"
               >
                 取消
               </button>
               <button
                 onClick={() => {
-                  setShowSignModal(false);
-                  navigate('/contracts');
+                  const pkg = vendor.packages.find((p) => p.id === selectedPackage);
+                  if (!pkg) return;
+                  const success = createContract({
+                    vendorId: vendor.id,
+                    packageId: pkg.id,
+                    packageName: pkg.name,
+                    totalPrice: pkg.price,
+                  });
+                  if (success) {
+                    setShowSignModal(false);
+                    navigate('/contracts');
+                  } else {
+                    setSignError('该套餐已存在有效协议，请勿重复签约');
+                  }
                 }}
                 className="flex-1 btn-primary"
               >
                 确认签署
               </button>
             </div>
+            {signError && (
+              <div className="mt-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-center gap-2 text-sm text-red-600">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                {signError}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from '@/components/layout/Layout';
 import Login from '@/pages/Login';
+import Setup from '@/pages/Setup';
 import Dashboard from '@/pages/Dashboard';
 import Vendors from '@/pages/Vendors';
 import VendorDetail from '@/pages/VendorDetail';
@@ -10,13 +11,29 @@ import Collaboration from '@/pages/Collaboration';
 import Guests from '@/pages/Guests';
 import Seating from '@/pages/Seating';
 import WeddingDay from '@/pages/WeddingDay';
+import { useAppStore } from '@/store/useAppStore';
+
+function RequireSetup({ children }: { children: JSX.Element }) {
+  const hasCompletedSetup = useAppStore((s) => s.hasCompletedSetup);
+  if (!hasCompletedSetup) {
+    return <Navigate to="/setup" replace />;
+  }
+  return children;
+}
 
 export default function App() {
   return (
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route element={<Layout />}>
+        <Route path="/setup" element={<Setup />} />
+        <Route
+          element={
+            <RequireSetup>
+              <Layout />
+            </RequireSetup>
+          }
+        >
           <Route path="/" element={<Dashboard />} />
           <Route path="/vendors" element={<Vendors />} />
           <Route path="/vendors/:id" element={<VendorDetail />} />

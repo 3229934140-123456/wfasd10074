@@ -19,6 +19,9 @@ import {
   Gift,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Check,
+  Link,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { WeddingTimelineItem, VendorCategory } from '@/types';
@@ -43,6 +46,9 @@ export default function WeddingDay() {
   const [editingItem, setEditingItem] = useState<WeddingTimelineItem | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filterVendor, setFilterVendor] = useState<string | null>(null);
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [shareVendorId, setShareVendorId] = useState<string | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
   const [formData, setFormData] = useState({
     time: '10:00',
     title: '',
@@ -52,6 +58,8 @@ export default function WeddingDay() {
     responsibleType: 'both' as 'collaborator' | 'vendor' | 'both',
     vendorIds: [] as string[],
   });
+
+  if (!project) return null;
 
   const filteredTimeline = filterVendor
     ? timeline.filter((item) => item.vendorIds?.includes(filterVendor))
@@ -88,7 +96,7 @@ export default function WeddingDay() {
   };
 
   const handleSubmit = () => {
-    if (!formData.title.trim() || !formData.time) return;
+    if (!formData.title.trim() || !formData.time || !project) return;
     if (editingItem) {
       updateTimelineItem(editingItem.id, formData);
     } else {
@@ -127,7 +135,10 @@ export default function WeddingDay() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="btn-secondary flex items-center gap-2">
+            <button
+              onClick={() => setShowShareModal(true)}
+              className="btn-secondary flex items-center gap-2"
+            >
               <Share2 className="w-4 h-4" />
               分享流程单
             </button>
@@ -408,6 +419,187 @@ export default function WeddingDay() {
               <button onClick={handleSubmit} className="flex-1 btn-primary">
                 {editingItem ? '保存修改' : '添加环节'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Modal */}
+      {showShareModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-xl shadow-lift w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col animate-slide-up">
+            <div className="p-6 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-display text-xl font-semibold flex items-center gap-2">
+                  <Share2 className="w-5 h-5 text-rose-gold" />
+                  分享婚礼流程单
+                </h3>
+                <p className="text-sm text-text-muted mt-1">
+                  选择供应商视角，生成专属流程单链接
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowShareModal(false);
+                  setShareVendorId(null);
+                }}
+                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-border transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 border-b border-border bg-cream/30">
+              <p className="text-sm text-text-secondary mb-3">选择供应商视角：</p>
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => setShareVendorId(null)}
+                  className={cn(
+                    'px-4 py-2 rounded-md text-sm transition-all flex items-center gap-1.5 border-2',
+                    shareVendorId === null
+                      ? 'border-rose-gold bg-white text-rose-gold-dark font-medium'
+                      : 'border-border bg-white/60 text-text-secondary hover:border-rose-gold-light',
+                  )}
+                >
+                  <Users className="w-3.5 h-3.5" />
+                  全部（新人视角）
+                </button>
+                {vendors.map((vendor) => {
+                  const Icon = vendorCategoryIcons[vendor.category];
+                  const isSelected = shareVendorId === vendor.id;
+                  return (
+                    <button
+                      key={vendor.id}
+                      onClick={() => setShareVendorId(isSelected ? null : vendor.id)}
+                      className={cn(
+                        'px-4 py-2 rounded-md text-sm transition-all flex items-center gap-1.5 border-2',
+                        isSelected
+                          ? 'border-rose-gold bg-white text-rose-gold-dark font-medium'
+                          : 'border-border bg-white/60 text-text-secondary hover:border-rose-gold-light',
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {vendor.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 bg-bg">
+              {shareVendorId ? (
+                <div className="mb-4 p-4 rounded-lg bg-gradient-to-r from-rose-gold/10 to-soft-pink/20 border border-rose-gold/20">
+                  {(() => {
+                    const v = vendors.find((x) => x.id === shareVendorId);
+                    if (!v) return null;
+                    const VI = vendorCategoryIcons[v.category];
+                    return (
+                      <div className="flex items-center gap-3">
+                        <img src={v.avatar} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white shadow-soft" />
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <VI className="w-4 h-4 text-rose-gold" />
+                            <p className="font-medium text-text-primary">{v.name}</p>
+                            <span className="chip">{CATEGORY_LABELS[v.category]}</span>
+                          </div>
+                          <p className="text-xs text-text-muted mt-0.5">仅显示与该供应商相关的环节</p>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div className="mb-4 p-4 rounded-lg bg-cream/50 border border-border">
+                  <div className="flex items-center gap-2 text-text-secondary text-sm">
+                    <Users className="w-4 h-4 text-rose-gold" />
+                    <span>新人和亲友视角：显示所有环节</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-3">
+                {(shareVendorId
+                  ? timeline.filter((item) => item.vendorIds?.includes(shareVendorId))
+                  : timeline
+                ).length === 0 ? (
+                  <div className="text-center py-12 text-text-muted">
+                    <PartyPopper className="w-10 h-10 mx-auto mb-2 opacity-50" />
+                    <p>该供应商暂无相关环节安排</p>
+                  </div>
+                ) : (
+                  (shareVendorId
+                    ? timeline.filter((item) => item.vendorIds?.includes(shareVendorId))
+                    : timeline
+                  ).map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="bg-white rounded-lg p-4 shadow-soft flex gap-4"
+                    >
+                      <div className="text-center min-w-[60px] border-r border-border pr-4">
+                        <p className="font-display text-2xl font-bold gold-text">
+                          {item.time.split(':')[0]}
+                        </p>
+                        <p className="text-sm text-text-muted">:{item.time.split(':')[1]}</p>
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="font-medium text-text-primary">{item.title}</h4>
+                          {idx === 0 && <span className="chip">开场</span>}
+                        </div>
+                        <p className="text-xs text-text-secondary flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-rose-gold" />
+                          {item.location}
+                        </p>
+                        {item.description && (
+                          <p className="text-xs text-text-muted mt-2">{item.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-border bg-white">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-lg bg-border/40 border border-border">
+                  <Link className="w-4 h-4 text-text-muted flex-shrink-0" />
+                  <code className="text-xs text-text-secondary flex-1 truncate font-mono">
+                    {shareVendorId
+                      ? `${window.location.origin}/wedding-day?vendor=${shareVendorId}`
+                      : `${window.location.origin}/wedding-day`}
+                  </code>
+                </div>
+                <button
+                  onClick={() => {
+                    const link = shareVendorId
+                      ? `${window.location.origin}/wedding-day?vendor=${shareVendorId}`
+                      : `${window.location.origin}/wedding-day`;
+                    navigator.clipboard?.writeText(link);
+                    setCopiedLink(true);
+                    setTimeout(() => setCopiedLink(false), 2000);
+                  }}
+                  className={cn(
+                    'btn-primary flex items-center gap-2',
+                    copiedLink && '!bg-sage-green',
+                  )}
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      已复制
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      复制链接
+                    </>
+                  )}
+                </button>
+              </div>
+              <p className="text-xs text-text-muted text-center">
+                打开链接即可查看对应视角的婚礼流程单（支持新增/编辑环节后实时更新）
+              </p>
             </div>
           </div>
         </div>

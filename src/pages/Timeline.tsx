@@ -44,6 +44,8 @@ export default function Timeline() {
     reminderDays: 7,
   });
 
+  if (!project) return null;
+
   const sortedTodos = [...todos].sort((a, b) => {
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
     return dayjs(a.dueDate).valueOf() - dayjs(b.dueDate).valueOf();

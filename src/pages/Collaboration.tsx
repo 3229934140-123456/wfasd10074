@@ -44,6 +44,8 @@ export default function Collaboration() {
     priority: 'medium' as 'high' | 'medium' | 'low',
   });
 
+  if (!project) return null;
+
   const handleAddMember = () => {
     if (!newMember.name.trim() || !newMember.phone.trim()) return;
     const avatar = `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(newMember.name)}`;

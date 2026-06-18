@@ -43,6 +43,8 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const { project, todos, contracts, guests, collaborators } = useAppStore();
 
+  if (!project) return null;
+
   const daysUntil = getDaysUntil(project.weddingDate);
 
   const pendingTodos = todos.filter((t) => !t.completed && dayjs(t.dueDate).isAfter(dayjs())).slice(0, 5);

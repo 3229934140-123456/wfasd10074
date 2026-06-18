@@ -26,7 +26,18 @@ const menuItems = [
 ];
 
 export default function Sidebar() {
-  const { project, currentUser } = useAppStore();
+  const { project, currentUser, resetAll } = useAppStore();
+
+  if (!project || !currentUser) {
+    return null;
+  }
+
+  const handleLogout = () => {
+    if (confirm('确定要清除所有数据并返回初始状态吗？')) {
+      resetAll();
+      window.location.href = '/login';
+    }
+  };
 
   return (
     <aside className="w-64 h-screen flex-shrink-0 bg-white border-r border-border flex flex-col">
@@ -86,7 +97,11 @@ export default function Sidebar() {
             <p className="text-sm font-medium text-text-primary truncate">{currentUser.name}</p>
             <p className="text-xs text-text-muted">新人</p>
           </div>
-          <button className="p-2 rounded-md text-text-muted hover:text-rose-gold hover:bg-rose-gold/10 transition-colors">
+          <button
+            onClick={handleLogout}
+            className="p-2 rounded-md text-text-muted hover:text-rose-gold hover:bg-rose-gold/10 transition-colors"
+            title="重置数据"
+          >
             <LogOut className="w-4 h-4" />
           </button>
         </div>

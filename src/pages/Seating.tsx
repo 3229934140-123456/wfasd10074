@@ -24,6 +24,7 @@ import {
   GripVertical,
   Trash2,
   Settings,
+  AlertCircle,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { SeatTable, Guest } from '@/types';
@@ -33,17 +34,22 @@ function TableCard({
   table,
   guests,
   onRemoveGuest,
+  isDragOver,
 }: {
   table: SeatTable;
   guests: Guest[];
   onRemoveGuest: (guestId: string) => void;
+  isDragOver?: boolean;
 }) {
   const capacityUsed = table.guestIds.length;
   const isFull = capacityUsed >= table.capacity;
 
   return (
     <div
-      className="absolute bg-white rounded-xl shadow-medium border-2 border-border p-3 transition-shadow hover:shadow-lift"
+      className={cn(
+        'absolute bg-white rounded-xl shadow-medium border-2 p-3 transition-all hover:shadow-lift',
+        isFull ? 'border-border' : isDragOver ? 'border-rose-gold shadow-lift' : 'border-border',
+      )}
       style={{
         left: table.position.x,
         top: table.position.y,
@@ -86,6 +92,11 @@ function TableCard({
               </button>
             </div>
           ))}
+        </div>
+      )}
+      {isFull && (
+        <div className="mt-2 pt-2 border-t border-border">
+          <p className="text-xs text-sage-green text-center">已满座</p>
         </div>
       )}
     </div>
@@ -138,16 +149,25 @@ function GuestItem({ guest, onRemove }: { guest: Guest; onRemove?: () => void })
 }
 
 export default function Seating() {
-  const { guests, tables, assignGuestToTable, removeGuestFromTable, addTable, updateTablePosition } =
+  const { guests, tables, project, assignGuestToTable, removeGuestFromTable, addTable, updateTablePosition } =
     useAppStore();
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [dragOverTableId, setDragOverTableId] = useState<string | null>(null);
   const [showAddTable, setShowAddTable] = useState(false);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
   const [newTable, setNewTable] = useState({
     tableNumber: tables.length + 1,
     name: '',
     capacity: 10,
     shape: 'round' as 'round' | 'rectangle',
   });
+
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 2000);
+  };
+
+  if (!project) return null;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -170,6 +190,7 @@ export default function Seating() {
 
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveId(null);
+    setDragOverTableId(null);
     const { active, over } = event;
 
     if (!over) return;
@@ -177,23 +198,39 @@ export default function Seating() {
     const guestId = String(active.id);
     const overId = String(over.id);
 
-    // If dropped on a table
     if (overId.startsWith('table-')) {
       const tableId = overId.replace('table-', '');
-      assignGuestToTable(guestId, tableId);
+      const table = tables.find((t) => t.id === tableId);
+      if (table && table.guestIds.length >= table.capacity && !table.guestIds.includes(guestId)) {
+        showToast(`桌${table.tableNumber}已满座，无法添加`);
+        return;
+      }
+      const success = assignGuestToTable(guestId, tableId);
+      if (!success) {
+        showToast('该桌已满座');
+      }
     }
   };
 
   const handleTableDrop = (e: React.DragEvent, tableId: string) => {
     e.preventDefault();
+    setDragOverTableId(null);
     if (activeId) {
-      assignGuestToTable(activeId, tableId);
+      const table = tables.find((t) => t.id === tableId);
+      if (table && table.guestIds.length >= table.capacity && !table.guestIds.includes(activeId)) {
+        showToast(`桌${table.tableNumber}已满座，无法添加`);
+        return;
+      }
+      const success = assignGuestToTable(activeId, tableId);
+      if (!success) {
+        showToast('该桌已满座');
+      }
     }
   };
 
   const handleAddTable = () => {
     addTable({
-      projectId: 'project-001',
+      projectId: project.id,
       tableNumber: newTable.tableNumber,
       name: newTable.name,
       capacity: newTable.capacity,
@@ -307,7 +344,11 @@ export default function Seating() {
               <div
                 key={table.id}
                 id={`table-${table.id}`}
-                onDragOver={(e) => e.preventDefault()}
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOverTableId(table.id);
+                }}
+                onDragLeave={() => setDragOverTableId(null)}
                 onDrop={(e) => handleTableDrop(e, table.id)}
                 className="transition-colors"
               >
@@ -315,12 +356,20 @@ export default function Seating() {
                   table={table}
                   guests={getTableGuests(table)}
                   onRemoveGuest={removeGuestFromTable}
+                  isDragOver={dragOverTableId === table.id}
                 />
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {toastMsg && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-dark-brown/90 text-white px-6 py-3 rounded-lg shadow-lift animate-slide-up flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-amber-400" />
+          {toastMsg}
+        </div>
+      )}
 
       {/* Add Table Modal */}
       {showAddTable && (

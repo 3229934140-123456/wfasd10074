@@ -30,6 +30,7 @@ const relationColors: Record<GuestRelation, string> = {
 
 export default function Guests() {
   const { guests, project, updateGuestRsvp, addGuest, deleteGuest } = useAppStore();
+  if (!project) return null;
   const [filter, setFilter] = useState<RsvpStatus | 'all'>('all');
   const [relationFilter, setRelationFilter] = useState<GuestRelation | 'all'>('all');
   const [searchQuery, setSearchQuery] = useState('');
