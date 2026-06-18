@@ -13,9 +13,14 @@ import type {
   Payment,
   WeddingStyle,
   VendorCategory,
+  SeatingPlanVersion,
+  VendorConfirmation,
+  PaymentMethod,
 } from '@/types';
 import { MOCK_VENDORS } from '@/data/mock';
 import { generateId } from '@/utils';
+import type { TimelineShareData } from '@/utils/share';
+import { encodeSharePayload } from '@/utils/share';
 
 interface AppState {
   currentUser: CurrentUser | null;
@@ -26,6 +31,7 @@ interface AppState {
   collaborators: Collaborator[];
   guests: Guest[];
   tables: SeatTable[];
+  seatingVersions: SeatingPlanVersion[];
   timeline: WeddingTimelineItem[];
   hasCompletedSetup: boolean;
 
@@ -57,11 +63,21 @@ interface AppState {
     totalPrice: number;
   }) => boolean;
   updateContractStatus: (id: string, status: ServiceContract['status']) => void;
-  markPaymentPaid: (contractId: string, paymentId: string) => void;
+  markPaymentPaid: (
+    contractId: string,
+    paymentId: string,
+    record?: {
+      method?: PaymentMethod;
+      note?: string;
+      voucherImage?: string;
+      transactionId?: string;
+    },
+  ) => void;
 
   // Guest actions
   updateGuestRsvp: (id: string, status: Guest['rsvpStatus']) => void;
   addGuest: (guest: Omit<Guest, 'id'>) => void;
+  addGuestsBulk: (guests: Omit<Guest, 'id'>[]) => number;
   deleteGuest: (id: string) => void;
 
   // Seating actions
@@ -69,14 +85,31 @@ interface AppState {
   removeGuestFromTable: (guestId: string) => void;
   addTable: (table: Omit<SeatTable, 'id'>) => void;
   updateTablePosition: (id: string, position: { x: number; y: number }) => void;
+  updateTable: (id: string, updates: Partial<SeatTable>) => void;
+  deleteTable: (id: string) => void;
+
+  // Seating Version actions
+  saveSeatingVersion: (name: string) => string;
+  loadSeatingVersion: (versionId: string) => boolean;
+  duplicateSeatingVersion: (versionId: string, newName?: string) => string | null;
+  deleteSeatingVersion: (versionId: string) => void;
+  renameSeatingVersion: (versionId: string, newName: string) => void;
 
   // Timeline actions
   addTimelineItem: (item: Omit<WeddingTimelineItem, 'id'>) => void;
   updateTimelineItem: (id: string, updates: Partial<WeddingTimelineItem>) => void;
   deleteTimelineItem: (id: string) => void;
+  setVendorConfirmation: (
+    timelineItemId: string,
+    vendorId: string,
+    confirmation: Omit<VendorConfirmation, 'vendorId' | 'confirmedAt'> & { confirmedAt?: string },
+  ) => void;
 
   // Collaborator actions
   addCollaborator: (collaborator: Omit<Collaborator, 'id'>) => void;
+
+  // Share
+  generateTimelineShareLink: (vendorId?: string) => string;
 }
 
 function autoGeneratePayments(totalPrice: number, weddingDate: string): Payment[] {
@@ -153,6 +186,7 @@ const initialState = {
   collaborators: [],
   guests: [],
   tables: [],
+  seatingVersions: [],
   timeline: [],
   hasCompletedSetup: false,
 };
@@ -288,6 +322,7 @@ export const useAppStore = create<AppState>()(
             location: '酒店迎宾区',
             responsibleIds: [],
             responsibleType: 'both',
+            vendorConfirmations: [],
           },
           {
             id: `wt-${generateId()}`,
@@ -297,6 +332,7 @@ export const useAppStore = create<AppState>()(
             location: '宴会厅主舞台',
             responsibleIds: [],
             responsibleType: 'both',
+            vendorConfirmations: [],
           },
           {
             id: `wt-${generateId()}`,
@@ -306,6 +342,7 @@ export const useAppStore = create<AppState>()(
             location: '宴会厅',
             responsibleIds: [],
             responsibleType: 'both',
+            vendorConfirmations: [],
           },
         ];
 
@@ -339,6 +376,7 @@ export const useAppStore = create<AppState>()(
           guests: [],
           contracts: [],
           tables: [],
+          seatingVersions: [],
         });
       },
 
@@ -440,7 +478,7 @@ export const useAppStore = create<AppState>()(
           ),
         })),
 
-      markPaymentPaid: (contractId, paymentId) =>
+      markPaymentPaid: (contractId, paymentId, record) =>
         set((state) => ({
           contracts: state.contracts.map((c) =>
             c.id === contractId
@@ -448,7 +486,19 @@ export const useAppStore = create<AppState>()(
                   ...c,
                   payments: c.payments.map((p) =>
                     p.id === paymentId
-                      ? { ...p, status: 'paid' as const, paidAt: new Date().toISOString().split('T')[0] }
+                      ? {
+                          ...p,
+                          status: 'paid' as const,
+                          paidAt: new Date().toISOString().split('T')[0],
+                          record: record
+                            ? {
+                                method: record.method,
+                                note: record.note,
+                                voucherImage: record.voucherImage,
+                                transactionId: record.transactionId,
+                              }
+                            : p.record,
+                        }
                       : p,
                   ),
                 }
@@ -471,6 +521,28 @@ export const useAppStore = create<AppState>()(
             },
           ],
         })),
+
+      addGuestsBulk: (newGuests) => {
+        const state = get();
+        const existingNames = new Set(state.guests.map((g) => g.name.trim()));
+        const toAdd: Guest[] = [];
+        const seen = new Set<string>();
+
+        for (const g of newGuests) {
+          const trimmedName = g.name.trim();
+          if (!trimmedName) continue;
+          if (existingNames.has(trimmedName)) continue;
+          if (seen.has(trimmedName)) continue;
+          seen.add(trimmedName);
+          toAdd.push({
+            ...g,
+            id: `g-${generateId()}`,
+          });
+        }
+
+        set({ guests: [...state.guests, ...toAdd] });
+        return toAdd.length;
+      },
 
       deleteGuest: (id) =>
         set((state) => ({
@@ -530,6 +602,100 @@ export const useAppStore = create<AppState>()(
           tables: state.tables.map((t) => (t.id === id ? { ...t, position } : t)),
         })),
 
+      updateTable: (id, updates) =>
+        set((state) => ({
+          tables: state.tables.map((t) => (t.id === id ? { ...t, ...updates } : t)),
+        })),
+
+      deleteTable: (id) => {
+        const state = get();
+        const table = state.tables.find((t) => t.id === id);
+        if (!table) return;
+        const guestIdsInTable = table.guestIds;
+        set({
+          tables: state.tables.filter((t) => t.id !== id),
+          guests: state.guests.map((g) =>
+            guestIdsInTable.includes(g.id) ? { ...g, tableId: undefined, seatNumber: undefined } : g,
+          ),
+        });
+      },
+
+      saveSeatingVersion: (name) => {
+        const state = get();
+        if (!state.project) return '';
+        const versionId = `sv-${generateId()}`;
+        const newVersion: SeatingPlanVersion = {
+          id: versionId,
+          projectId: state.project.id,
+          name,
+          createdAt: new Date().toISOString(),
+          tables: JSON.parse(JSON.stringify(state.tables)),
+          isActive: true,
+        };
+        set({
+          seatingVersions: [...state.seatingVersions.map((v) => ({ ...v, isActive: false })), newVersion],
+        });
+        return versionId;
+      },
+
+      loadSeatingVersion: (versionId) => {
+        const state = get();
+        const version = state.seatingVersions.find((v) => v.id === versionId);
+        if (!version || !state.project) return false;
+
+        const versionTables: SeatTable[] = JSON.parse(JSON.stringify(version.tables));
+        const guestTableMap = new Map<string, string>();
+        for (const t of versionTables) {
+          t.projectId = state.project.id;
+          for (const gid of t.guestIds) {
+            guestTableMap.set(gid, t.id);
+          }
+        }
+
+        set({
+          tables: versionTables,
+          seatingVersions: state.seatingVersions.map((v) => ({
+            ...v,
+            isActive: v.id === versionId,
+          })),
+          guests: state.guests.map((g) => ({
+            ...g,
+            tableId: guestTableMap.get(g.id),
+          })),
+        });
+        return true;
+      },
+
+      duplicateSeatingVersion: (versionId, newName) => {
+        const state = get();
+        const version = state.seatingVersions.find((v) => v.id === versionId);
+        if (!version || !state.project) return null;
+        const newId = `sv-${generateId()}`;
+        const name = newName || `${version.name} 副本`;
+        const duplicated: SeatingPlanVersion = {
+          id: newId,
+          projectId: state.project.id,
+          name,
+          createdAt: new Date().toISOString(),
+          tables: JSON.parse(JSON.stringify(version.tables)),
+          isActive: false,
+        };
+        set({ seatingVersions: [...state.seatingVersions, duplicated] });
+        return newId;
+      },
+
+      deleteSeatingVersion: (versionId) =>
+        set((state) => ({
+          seatingVersions: state.seatingVersions.filter((v) => v.id !== versionId),
+        })),
+
+      renameSeatingVersion: (versionId, newName) =>
+        set((state) => ({
+          seatingVersions: state.seatingVersions.map((v) =>
+            v.id === versionId ? { ...v, name: newName } : v,
+          ),
+        })),
+
       addTimelineItem: (item) =>
         set((state) => ({
           timeline: [
@@ -537,6 +703,7 @@ export const useAppStore = create<AppState>()(
             {
               ...item,
               id: `wt-${generateId()}`,
+              vendorConfirmations: item.vendorConfirmations || [],
             },
           ].sort((a, b) => a.time.localeCompare(b.time)),
         })),
@@ -553,6 +720,31 @@ export const useAppStore = create<AppState>()(
           timeline: state.timeline.filter((t) => t.id !== id),
         })),
 
+      setVendorConfirmation: (timelineItemId, vendorId, confirmation) =>
+        set((state) => ({
+          timeline: state.timeline.map((t) => {
+            if (t.id !== timelineItemId) return t;
+            const existing = t.vendorConfirmations || [];
+            const others = existing.filter((c) => c.vendorId !== vendorId);
+            return {
+              ...t,
+              vendorConfirmations: [
+                ...others,
+                {
+                  vendorId,
+                  status: confirmation.status,
+                  confirmedAt:
+                    confirmation.confirmedAt ||
+                    (confirmation.status !== 'pending' ? new Date().toISOString() : undefined),
+                  contactPerson: confirmation.contactPerson,
+                  contactPhone: confirmation.contactPhone,
+                  note: confirmation.note,
+                },
+              ],
+            };
+          }),
+        })),
+
       addCollaborator: (collaborator) =>
         set((state) => ({
           collaborators: [
@@ -563,6 +755,61 @@ export const useAppStore = create<AppState>()(
             },
           ],
         })),
+
+      generateTimelineShareLink: (vendorId) => {
+        const state = get();
+        if (!state.project) return '';
+
+        const relevantVendors = vendorId
+          ? state.vendors.filter((v) => v.id === vendorId)
+          : state.vendors.filter((v) =>
+              state.contracts.some((c) => c.vendorId === v.id && c.status === 'signed'),
+            );
+
+        const payload: TimelineShareData = {
+          project: {
+            groomName: state.project.groomName,
+            brideName: state.project.brideName,
+            coupleName: state.project.coupleName,
+            weddingDate: state.project.weddingDate,
+            location: state.project.location,
+          },
+          timeline: state.timeline
+            .filter((item) => {
+              if (!vendorId) return true;
+              return item.vendorIds?.includes(vendorId) || item.responsibleType === 'both';
+            })
+            .map((item) => ({
+              id: item.id,
+              time: item.time,
+              title: item.title,
+              location: item.location,
+              description: item.description,
+              vendorIds: item.vendorIds,
+              responsibleType: item.responsibleType,
+              vendorConfirmations: item.vendorConfirmations?.map((c) => ({
+                vendorId: c.vendorId,
+                status: c.status,
+                confirmedAt: c.confirmedAt,
+                contactPerson: c.contactPerson,
+                contactPhone: c.contactPhone,
+                note: c.note,
+              })),
+            })),
+          vendors: relevantVendors.map((v) => ({
+            id: v.id,
+            name: v.name,
+            category: v.category,
+            avatar: v.avatar,
+          })),
+          createdAt: new Date().toISOString(),
+        };
+
+        const encoded = encodeSharePayload(payload);
+        const base = `${window.location.origin}${window.location.pathname}#/share/timeline`;
+        const vendorParam = vendorId ? `&vendor=${encodeURIComponent(vendorId)}` : '';
+        return `${base}?data=${encoded}${vendorParam}`;
+      },
     }),
     {
       name: 'wedding-plan-storage',
@@ -576,6 +823,7 @@ export const useAppStore = create<AppState>()(
         collaborators: state.collaborators,
         guests: state.guests,
         tables: state.tables,
+        seatingVersions: state.seatingVersions,
         timeline: state.timeline,
         hasCompletedSetup: state.hasCompletedSetup,
       }),

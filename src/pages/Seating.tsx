@@ -27,6 +27,15 @@ import {
   Settings,
   AlertCircle,
   MoveRight,
+  Save,
+  Copy,
+  FolderOpen,
+  Pencil,
+  RotateCcw,
+  Check,
+  Layers,
+  ChevronDown,
+  Info,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import type { SeatTable, Guest } from '@/types';
@@ -205,12 +214,29 @@ function GuestItem({ guest, onRemove }: { guest: Guest; onRemove?: () => void })
 }
 
 export default function Seating() {
-  const { guests, tables, project, assignGuestToTable, removeGuestFromTable, addTable } =
-    useAppStore();
+  const {
+    guests,
+    tables,
+    project,
+    assignGuestToTable,
+    removeGuestFromTable,
+    addTable,
+    seatingVersions,
+    saveSeatingVersion,
+    loadSeatingVersion,
+    duplicateSeatingVersion,
+    deleteSeatingVersion,
+    renameSeatingVersion,
+  } = useAppStore();
   const [activeId, setActiveId] = useState<string | null>(null);
   const [overTableId, setOverTableId] = useState<string | null>(null);
   const [showAddTable, setShowAddTable] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [showVersionDropdown, setShowVersionDropdown] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [saveVersionName, setSaveVersionName] = useState('');
+  const [renameVersionId, setRenameVersionId] = useState<string | null>(null);
+  const [renameName, setRenameName] = useState('');
   const [newTable, setNewTable] = useState({
     tableNumber: tables.length + 1,
     name: '',
@@ -225,6 +251,8 @@ export default function Seating() {
 
   if (!project) return null;
 
+  const activeVersion = seatingVersions.find((v) => v.isActive);
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -233,14 +261,8 @@ export default function Seating() {
     }),
   );
 
-  const unassignedGuests = useMemo(
-    () => guests.filter((g) => !g.tableId),
-    [guests],
-  );
-  const assignedGuests = useMemo(
-    () => guests.filter((g) => g.tableId),
-    [guests],
-  );
+  const unassignedGuests = useMemo(() => guests.filter((g) => !g.tableId), [guests]);
+  const assignedGuests = useMemo(() => guests.filter((g) => g.tableId), [guests]);
   const activeGuest = guests.find((g) => g.id === activeId);
 
   const getTableGuests = (table: SeatTable) =>
@@ -316,6 +338,46 @@ export default function Seating() {
     removeGuestFromTable(guestId);
   };
 
+  const handleSaveVersion = () => {
+    const name = saveVersionName.trim() || `方案 ${new Date().toLocaleDateString('zh-CN')}`;
+    saveSeatingVersion(name);
+    setSaveVersionName('');
+    setShowSaveDialog(false);
+    showToast(`已保存方案「${name}」`);
+  };
+
+  const handleLoadVersion = (id: string) => {
+    const v = seatingVersions.find((x) => x.id === id);
+    loadSeatingVersion(id);
+    setShowVersionDropdown(false);
+    if (v) showToast(`已加载「${v.name}」`);
+  };
+
+  const handleDuplicateVersion = (id: string) => {
+    const newId = duplicateSeatingVersion(id);
+    if (newId) {
+      loadSeatingVersion(newId);
+      showToast('已复制为新方案');
+    }
+    setShowVersionDropdown(false);
+  };
+
+  const handleDeleteVersion = (id: string) => {
+    const v = seatingVersions.find((x) => x.id === id);
+    if (confirm(`确定删除方案「${v?.name}」吗？`)) {
+      deleteSeatingVersion(id);
+      showToast('方案已删除');
+    }
+    setShowVersionDropdown(false);
+  };
+
+  const handleRenameSubmit = () => {
+    if (!renameVersionId || !renameName.trim()) return;
+    renameSeatingVersion(renameVersionId, renameName.trim());
+    setRenameVersionId(null);
+    setRenameName('');
+  };
+
   return (
     <div className="space-y-6">
       {/* Stats */}
@@ -353,6 +415,176 @@ export default function Seating() {
           <p className="font-display text-2xl font-semibold text-amber-600">
             {unassignedGuests.length}
           </p>
+        </div>
+      </div>
+
+      {/* Version Manager */}
+      <div className="card">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-rose-gold/20 to-rose-gold/10 flex items-center justify-center">
+              <Layers className="w-5 h-5 text-rose-gold" />
+            </div>
+            <div>
+              <p className="text-xs text-text-muted">排桌方案版本</p>
+              <p className="text-sm font-medium text-text-primary">
+                当前：
+                <span className="gold-text font-semibold">
+                  {activeVersion?.name || '未命名草稿'}
+                </span>
+                {activeVersion && (
+                  <span className="ml-2 text-[11px] text-text-muted">
+                    创建于 {new Date(activeVersion.createdAt).toLocaleDateString('zh-CN')}
+                  </span>
+                )}
+                {!activeVersion && (
+                  <span className="ml-2 text-[11px] text-amber-600">
+                    调整后记得保存方案
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative">
+              <button
+                onClick={() => setShowVersionDropdown(!showVersionDropdown)}
+                className="btn-secondary flex items-center gap-2">
+                <FolderOpen className="w-4 h-4" />
+                切换方案
+                <span className="chip !py-0 !px-1.5 ml-1">{seatingVersions.length}</span>
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+              {showVersionDropdown && (
+                <div className="absolute right-0 top-full mt-2 w-80 card !p-2 z-50 shadow-lift animate-fade-in">
+                  {seatingVersions.length === 0 ? (
+                    <div className="p-4 text-center text-text-muted text-sm">
+                      <RotateCcw className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      还没有保存任何方案
+                    </div>
+                  ) : (
+                    <div className="space-y-1 max-h-80 overflow-y-auto">
+                      {[...seatingVersions]
+                        .sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt))
+                        .map((v) => (
+                          <div
+                            key={v.id}
+                            className={cn(
+                              'rounded-lg p-2.5 transition-colors group',
+                              v.isActive ? 'bg-rose-gold/10 border border-rose-gold/30' : 'hover:bg-cream/50',
+                            )}>
+                            {renameVersionId === v.id ? (
+                              <div className="flex items-center gap-2">
+                                <input
+                                  autoFocus
+                                  value={renameName}
+                                  onChange={(e) => setRenameName(e.target.value)}
+                                  onBlur={handleRenameSubmit}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleRenameSubmit();
+                                    if (e.key === 'Escape') {
+                                      setRenameVersionId(null);
+                                      setRenameName('');
+                                    }
+                                  }}
+                                  className="flex-1 text-sm px-2 py-1 rounded border border-rose-gold/40 focus:outline-none focus:border-rose-gold"
+                                />
+                                <Check
+                                  onClick={handleRenameSubmit}
+                                  className="w-4 h-4 text-emerald-600 cursor-pointer"
+                                />
+                              </div>
+                            ) : (
+                              <>
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {v.isActive && (
+                                      <span className="w-2 h-2 rounded-full bg-rose-gold flex-shrink-0 animate-pulse" />
+                                    )}
+                                    <p className="text-sm font-medium text-text-primary truncate">
+                                      {v.name}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                      onClick={() => {
+                                        setRenameVersionId(v.id);
+                                        setRenameName(v.name);
+                                      }}
+                                      className="p-1 rounded hover:bg-border text-text-muted hover:text-rose-gold">
+                                      <Pencil className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDuplicateVersion(v.id)}
+                                      className="p-1 rounded hover:bg-border text-text-muted hover:text-rose-gold"
+                                      title="复制为新方案">
+                                      <Copy className="w-3.5 h-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteVersion(v.id)}
+                                      className="p-1 rounded hover:bg-red-50 text-text-muted hover:text-red-500">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between">
+                                  <p className="text-[11px] text-text-muted">
+                                    {v.tables.length} 桌 ·{' '}
+                                    {new Date(v.createdAt).toLocaleDateString('zh-CN')}{' '}
+                                    {new Date(v.createdAt).toLocaleTimeString('zh-CN', {
+                                      hour: '2-digit',
+                                      minute: '2-digit',
+                                    })}
+                                  </p>
+                                  {!v.isActive ? (
+                                    <button
+                                      onClick={() => handleLoadVersion(v.id)}
+                                      className="text-[11px] px-2 py-0.5 rounded bg-rose-gold/10 text-rose-gold-dark hover:bg-rose-gold hover:text-white transition-colors">
+                                      加载
+                                    </button>
+                                  ) : (
+                                    <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                                      当前
+                                    </span>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                if (activeVersion) {
+                  duplicateSeatingVersion(activeVersion.id, `${activeVersion.name} - 调整版`);
+                  const latest = [...seatingVersions].sort(
+                    (a, b) => +new Date(b.createdAt) - +new Date(a.createdAt),
+                  )[0];
+                  if (latest) {
+                    loadSeatingVersion(latest.id);
+                    showToast('已复制当前方案');
+                  }
+                } else {
+                  setShowSaveDialog(true);
+                }
+              }}
+              className="btn-secondary flex items-center gap-2"
+              title="复制当前方案">
+              <Copy className="w-4 h-4" />
+              另存为副本
+            </button>
+            <button
+              onClick={() => setShowSaveDialog(true)}
+              className="btn-primary flex items-center gap-2">
+              <Save className="w-4 h-4" />
+              保存方案
+            </button>
+          </div>
         </div>
       </div>
 
@@ -523,6 +755,54 @@ export default function Seating() {
               </button>
               <button onClick={handleAddTable} className="flex-1 btn-primary">
                 添加桌位
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Save Version Dialog */}
+      {showSaveDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-xl shadow-lift w-full max-w-md p-6 animate-slide-up">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl font-semibold flex items-center gap-2">
+                <Save className="w-5 h-5 text-rose-gold" />
+                保存排桌方案
+              </h3>
+              <button
+                onClick={() => setShowSaveDialog(false)}
+                className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-border transition-colors">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm text-text-secondary mb-1.5 block">方案名称</label>
+                <input
+                  autoFocus
+                  value={saveVersionName}
+                  onChange={(e) => setSaveVersionName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleSaveVersion();
+                  }}
+                  placeholder="如：初始方案、新人调整版、最终版"
+                  className="input-field"
+                />
+              </div>
+              <div className="p-3 rounded-lg bg-cream/50 border border-border">
+                <p className="text-xs text-text-secondary flex items-center gap-1.5">
+                  <Info className="w-3.5 h-3.5 text-rose-gold" />
+                  将保存 {tables.length} 张桌子的位置和座位安排
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setShowSaveDialog(false)} className="flex-1 btn-secondary">
+                取消
+              </button>
+              <button onClick={handleSaveVersion} className="flex-1 btn-primary">
+                保存方案
               </button>
             </div>
           </div>

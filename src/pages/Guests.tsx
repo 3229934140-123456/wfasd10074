@@ -33,7 +33,7 @@ const relationColors: Record<GuestRelation, string> = {
 };
 
 export default function Guests() {
-  const { guests, project, updateGuestRsvp, addGuest, deleteGuest } = useAppStore();
+  const { guests, project, updateGuestRsvp, addGuest, addGuestsBulk, deleteGuest } = useAppStore();
   if (!project) return null;
   const [filter, setFilter] = useState<RsvpStatus | 'all'>('all');
   const [relationFilter, setRelationFilter] = useState<GuestRelation | 'all'>('all');
@@ -188,7 +188,7 @@ export default function Guests() {
   };
 
   const handleBulkImport = () => {
-    bulkPreview.forEach((g) => addGuest(g));
+    const count = addGuestsBulk(bulkPreview);
     setShowBulkModal(false);
     setBulkText('');
     setBulkPreview([]);

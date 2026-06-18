@@ -15,9 +15,24 @@ import {
   LayoutGrid,
   ChevronLeft,
   ChevronRight,
+  X,
+  FileImage,
+  MessageSquare,
+  Hash,
+  Receipt,
+  DollarSign,
+  Copy,
+  Check,
+  Info,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import { CATEGORY_LABELS, type ServiceContract, type Payment } from '@/types';
+import {
+  CATEGORY_LABELS,
+  PAYMENT_METHOD_LABELS,
+  type ServiceContract,
+  type Payment,
+  type PaymentMethod,
+} from '@/types';
 import { formatMoney, formatDate, dayjs } from '@/utils/date';
 import { cn } from '@/utils';
 
@@ -49,10 +64,241 @@ type PaymentWithContract = Payment & {
   category: string;
 };
 
+interface PaymentModalProps {
+  open: boolean;
+  onClose: () => void;
+  payment: Payment;
+  contractId: string;
+  contractName: string;
+  paymentTypeName: string;
+}
+
+function PaymentRecordModal({ open, onClose, payment, contractId, contractName, paymentTypeName }: PaymentModalProps) {
+  const { markPaymentPaid } = useAppStore();
+  const [method, setMethod] = useState<PaymentMethod>('bank_transfer');
+  const [note, setNote] = useState(payment.record?.note || '');
+  const [voucherImage, setVoucherImage] = useState(payment.record?.voucherImage || '');
+  const [transactionId, setTransactionId] = useState(payment.record?.transactionId || '');
+  const [copyOk, setCopyOk] = useState(false);
+  const isEditing = payment.status === 'paid';
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => setVoucherImage(reader.result as string);
+    reader.readAsDataURL(f);
+  };
+
+  const submit = () => {
+    markPaymentPaid(contractId, payment.id, {
+      method,
+      note: note.trim() || undefined,
+      voucherImage: voucherImage || undefined,
+      transactionId: transactionId.trim() || undefined,
+    });
+    onClose();
+  };
+
+  const copyRecord = () => {
+    const text = [
+      `合同：${contractName}`,
+      `款项：${paymentTypeName} - ${formatMoney(payment.amount)}`,
+      `支付方式：${PAYMENT_METHOD_LABELS[method]}`,
+      transactionId ? `流水号：${transactionId}` : null,
+      payment.paidAt ? `支付日期：${formatDate(payment.paidAt)}` : null,
+      note ? `备注：${note}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    navigator.clipboard?.writeText(text);
+    setCopyOk(true);
+    setTimeout(() => setCopyOk(false), 2000);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white rounded-xl shadow-lift w-full max-w-lg p-6 animate-slide-up max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h3 className="font-display text-xl font-semibold flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-rose-gold" />
+              {isEditing ? '付款记录详情' : '标记已付款'}
+            </h3>
+            <p className="text-xs text-text-muted mt-1">
+              {contractName} · {paymentTypeName} · {formatMoney(payment.amount)}
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-md text-text-muted hover:text-text-primary hover:bg-border transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="p-3 rounded-lg bg-cream/50 border border-border grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-text-muted">应付金额</span>
+              <p className="font-display text-lg font-semibold gold-text mt-0.5">{formatMoney(payment.amount)}</p>
+            </div>
+            <div>
+              <span className="text-text-muted">截止日期</span>
+              <p className="text-sm font-medium text-text-primary mt-1">{formatDate(payment.dueDate)}</p>
+            </div>
+            {payment.paidAt && (
+              <>
+                <div>
+                  <span className="text-text-muted">已付日期</span>
+                  <p className="text-sm font-medium text-sage-green mt-1">{formatDate(payment.paidAt)}</p>
+                </div>
+                {payment.record?.method && (
+                  <div>
+                    <span className="text-text-muted">支付方式</span>
+                    <p className="text-sm font-medium text-text-primary mt-1">
+                      {PAYMENT_METHOD_LABELS[payment.record.method]}
+                    </p>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+
+          {!isEditing && (
+            <div>
+              <label className="text-sm text-text-secondary mb-1.5 block flex items-center gap-1.5">
+                <DollarSign className="w-4 h-4 text-rose-gold" />
+                支付方式
+              </label>
+              <div className="grid grid-cols-5 gap-2">
+                {(Object.keys(PAYMENT_METHOD_LABELS) as PaymentMethod[]).map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setMethod(m)}
+                    className={cn(
+                      'py-2 rounded-lg border-2 text-[11px] transition-colors',
+                      method === m
+                        ? 'border-rose-gold bg-rose-gold/5 text-rose-gold-dark font-medium'
+                        : 'border-border text-text-secondary hover:border-rose-gold-light',
+                    )}>
+                    {PAYMENT_METHOD_LABELS[m]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {!isEditing && (
+            <div>
+              <label className="text-sm text-text-secondary mb-1.5 block flex items-center gap-1.5">
+                <Hash className="w-4 h-4 text-rose-gold" />
+                交易流水号（可选）
+              </label>
+              <input
+                value={transactionId}
+                onChange={(e) => setTransactionId(e.target.value)}
+                placeholder="转账单号、支付宝/微信流水号等"
+                className="input-field"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="text-sm text-text-secondary mb-1.5 block flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-rose-gold" />
+              备注说明（可选）
+            </label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="支付方、手续费、减免说明等..."
+              className={cn('input-field resize-none', isEditing && 'bg-cream/30 cursor-default')}
+              readOnly={isEditing}
+            />
+          </div>
+
+          <div>
+            <label className="text-sm text-text-secondary mb-1.5 block flex items-center gap-1.5">
+              <FileImage className="w-4 h-4 text-rose-gold" />
+              支付凭证（截图、回单等）
+            </label>
+            {voucherImage ? (
+              <div className="relative rounded-lg overflow-hidden border border-border max-h-56">
+                <img src={voucherImage} alt="凭证" className="w-full h-auto" />
+                {!isEditing && (
+                  <button
+                    onClick={() => setVoucherImage('')}
+                    className="absolute top-2 right-2 p-1.5 bg-black/60 text-white rounded-full hover:bg-black/80">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            ) : (
+              !isEditing && (
+                <label className="block border-2 border-dashed border-border rounded-lg p-8 text-center cursor-pointer hover:border-rose-gold/50 hover:bg-cream/30 transition-colors">
+                  <FileImage className="w-8 h-8 mx-auto text-text-muted mb-2" />
+                  <p className="text-sm text-text-secondary">点击选择图片文件</p>
+                  <p className="text-xs text-text-muted mt-1">支持 JPG / PNG</p>
+                  <input type="file" accept="image/*" onChange={handleFile} className="hidden" />
+                </label>
+              )
+            )}
+          </div>
+
+          {isEditing && (
+            <div className="p-3 rounded-lg bg-sage-green/5 border border-sage-green/20 flex items-start gap-2">
+              <Info className="w-4 h-4 text-sage-green flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-sage-green font-medium">已完成付款</p>
+                <p className="text-[11px] text-text-muted mt-0.5">
+                  如需修改凭证信息，请先取消该笔付款标记后重新登记
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex gap-3 mt-6">
+          <button onClick={onClose} className="flex-1 btn-secondary">
+            {isEditing ? '关闭' : '取消'}
+          </button>
+          {isEditing ? (
+            <button
+              onClick={copyRecord}
+              className={cn('flex-1 flex items-center justify-center gap-2', copyOk ? 'btn-secondary !bg-emerald-500 !text-white !border-emerald-500' : 'btn-primary')}>
+              {copyOk ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  已复制
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  复制记录
+                </>
+              )}
+            </button>
+          ) : (
+            <button onClick={submit} className="flex-1 btn-primary flex items-center justify-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              确认已付款
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ContractCard({ contract }: { contract: ServiceContract }) {
   const [expanded, setExpanded] = useState(false);
-  const { markPaymentPaid, updateContractStatus } = useAppStore();
+  const { updateContractStatus } = useAppStore();
   const StatusIcon = statusConfig[contract.status].icon;
+  const [payModal, setPayModal] = useState<{ payment: Payment } | null>(null);
 
   const totalPaid = contract.payments
     .filter((p) => p.status === 'paid')
@@ -151,7 +397,7 @@ function ContractCard({ contract }: { contract: ServiceContract }) {
                   key={payment.id}
                   payment={payment}
                   contractId={contract.id}
-                  onMarkPaid={() => markPaymentPaid(contract.id, payment.id)}
+                  onMarkPaid={() => setPayModal({ payment })}
                 />
               ))
             )}
@@ -175,6 +421,16 @@ function ContractCard({ contract }: { contract: ServiceContract }) {
           )}
         </div>
       )}
+      {payModal && (
+        <PaymentRecordModal
+          open={true}
+          onClose={() => setPayModal(null)}
+          payment={payModal.payment}
+          contractId={contract.id}
+          contractName={`${contract.vendorName} - ${contract.packageName}`}
+          paymentTypeName={paymentTypeLabels[payModal.payment.type]}
+        />
+      )}
     </div>
   );
 }
@@ -195,15 +451,17 @@ function PaymentRow({
 
   return (
     <div
+      onClick={payment.status === 'paid' ? onMarkPaid : undefined}
       className={cn(
         'flex items-center justify-between rounded-lg bg-white border border-border',
         compact ? 'p-2.5' : 'p-3',
+        payment.status === 'paid' && 'cursor-pointer hover:border-rose-gold/50 hover:bg-cream/30 transition-colors',
       )}
     >
       <div className="flex items-center gap-3">
         <div
           className={cn(
-            'w-9 h-9 rounded-lg flex items-center justify-center',
+            'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
             payment.status === 'paid'
               ? 'bg-sage-green/20'
               : isOverdue
@@ -220,7 +478,7 @@ function PaymentRow({
           )}
         </div>
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="font-medium text-text-primary">{paymentTypeLabels[payment.type]}</p>
             {payment.status === 'paid' && <span className="chip-green">已支付</span>}
             {isOverdue && payment.status === 'pending' && (
@@ -229,6 +487,11 @@ function PaymentRow({
             {isSoon && !isOverdue && payment.status === 'pending' && (
               <span className="chip">即将到期</span>
             )}
+            {payment.record?.method && (
+              <span className="chip !bg-cream !text-rose-gold-dark !border-rose-gold/20">
+                {PAYMENT_METHOD_LABELS[payment.record.method]}
+              </span>
+            )}
           </div>
           <p className="text-xs text-text-muted">
             截止日期：{formatDate(payment.dueDate)}
@@ -236,14 +499,27 @@ function PaymentRow({
           </p>
         </div>
       </div>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3">
+        {payment.record?.voucherImage && !compact && (
+          <div className="w-9 h-9 rounded-md overflow-hidden border border-border flex-shrink-0 hidden sm:block">
+            <img src={payment.record.voucherImage} alt="凭证" className="w-full h-full object-cover" />
+          </div>
+        )}
         <span className="font-display text-lg font-semibold text-rose-gold-dark">
           {formatMoney(payment.amount)}
         </span>
         {payment.status === 'pending' && !compact && (
-          <button onClick={onMarkPaid} className="btn-primary !py-1.5 !px-4 text-sm">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onMarkPaid();
+            }}
+            className="btn-primary !py-1.5 !px-4 text-sm">
             标记已付
           </button>
+        )}
+        {payment.status === 'paid' && !compact && (
+          <Eye className="w-4 h-4 text-text-muted" />
         )}
       </div>
     </div>
@@ -258,6 +534,7 @@ function CalendarView({
   onMarkPaid: (contractId: string, paymentId: string) => void;
 }) {
   const [currentMonth, setCurrentMonth] = useState(dayjs().startOf('month'));
+  const [payModal, setPayModal] = useState<{ payment: PaymentWithContract } | null>(null);
 
   const startOfMonth = currentMonth.startOf('month');
   const endOfMonth = currentMonth.endOf('month');
@@ -282,6 +559,10 @@ function CalendarView({
   const monthPayments = payments.filter(
     (p) => dayjs(p.dueDate).isSame(currentMonth, 'month') && p.status === 'pending',
   );
+
+  const handlePaymentClick = (payment: PaymentWithContract) => {
+    setPayModal({ payment });
+  };
 
   return (
     <div className="card !p-0 overflow-hidden">
@@ -356,17 +637,37 @@ function CalendarView({
                 {date.date()}
               </div>
               <div className="space-y-1">
-                {dayPayments.slice(0, 2).map((payment) => (
-                  <div
-                    key={payment.id}
-                    className={cn(
-                      'text-[10px] px-1.5 py-0.5 rounded truncate text-white font-medium',
-                      `bg-gradient-to-r ${paymentTypeColors[payment.type]}`,
-                    )}
-                    title={`${paymentTypeLabels[payment.type]} - ${payment.vendorName} | ${formatMoney(payment.amount)} | ${payment.paidAt ? '已支付' : '待支付'}`}>
-                    {paymentTypeLabels[payment.type]} · {payment.vendorName.slice(0, 4)}
-                  </div>
-                ))}
+                {dayPayments.slice(0, 2).map((payment) => {
+                  const tooltip = [
+                    `${payment.vendorName} · ${payment.packageName}`,
+                    `${paymentTypeLabels[payment.type]} ${formatMoney(payment.amount)}`,
+                    payment.status === 'paid'
+                      ? [
+                          `✅ 已支付 · ${formatDate(payment.paidAt)}`,
+                          payment.record?.method ? `方式：${PAYMENT_METHOD_LABELS[payment.record.method]}` : null,
+                          payment.record?.transactionId ? `流水号：${payment.record.transactionId}` : null,
+                          payment.record?.note ? `备注：${payment.record.note}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join('\n')
+                      : `⏳ ${dayjs(payment.dueDate).isBefore(dayjs(), 'day') ? '已逾期' : '待支付'} · 截止${formatDate(payment.dueDate)}`,
+                  ].join('\n');
+                  return (
+                    <div
+                      key={payment.id}
+                      onClick={() => handlePaymentClick(payment)}
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.5 rounded truncate font-medium cursor-pointer hover:opacity-80 transition-opacity',
+                        payment.status === 'paid'
+                          ? 'bg-sage-green text-white'
+                          : `bg-gradient-to-r ${paymentTypeColors[payment.type]} text-white`,
+                      )}
+                      title={tooltip}>
+                      {payment.status === 'paid' ? '✓ ' : ''}
+                      {paymentTypeLabels[payment.type]} · {payment.vendorName.slice(0, 4)}
+                    </div>
+                  );
+                })}
                 {dayPayments.length > 2 && (
                   <p className="text-[10px] text-text-muted text-center">
                     +{dayPayments.length - 2} 笔
@@ -435,7 +736,7 @@ function CalendarView({
                       {formatMoney(payment.amount)}
                     </span>
                     <button
-                      onClick={() => onMarkPaid(payment.contractId, payment.id)}
+                      onClick={() => handlePaymentClick(payment)}
                       className="btn-primary !py-1 !px-3 text-xs"
                     >
                       标记已付
@@ -446,6 +747,16 @@ function CalendarView({
           </div>
         )}
       </div>
+      {payModal && (
+        <PaymentRecordModal
+          open={true}
+          onClose={() => setPayModal(null)}
+          payment={payModal.payment}
+          contractId={payModal.payment.contractId}
+          contractName={`${payModal.payment.vendorName} - ${payModal.payment.packageName}`}
+          paymentTypeName={paymentTypeLabels[payModal.payment.type]}
+        />
+      )}
     </div>
   );
 }

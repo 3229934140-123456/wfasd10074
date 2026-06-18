@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   PartyPopper,
   Clock,
@@ -22,11 +22,20 @@ import {
   Copy,
   Check,
   Link,
+  CheckCircle,
+  XCircle,
+  Edit3,
+  Info,
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
-import type { WeddingTimelineItem, VendorCategory } from '@/types';
-import { CATEGORY_LABELS } from '@/types';
+import type {
+  WeddingTimelineItem,
+  VendorCategory,
+  VendorConfirmationStatus,
+} from '@/types';
+import { CATEGORY_LABELS, VENDOR_CONFIRMATION_LABELS } from '@/types';
 import { cn } from '@/utils';
+import { useShareBridge } from '@/hooks/useShareBridge';
 
 const vendorCategoryIcons: Record<VendorCategory, typeof Camera> = {
   photography: Camera,
@@ -40,8 +49,18 @@ const vendorCategoryIcons: Record<VendorCategory, typeof Camera> = {
 };
 
 export default function WeddingDay() {
-  const { timeline, vendors, addTimelineItem, updateTimelineItem, deleteTimelineItem, project } =
-    useAppStore();
+  const {
+    timeline,
+    vendors,
+    addTimelineItem,
+    updateTimelineItem,
+    deleteTimelineItem,
+    project,
+    generateTimelineShareLink,
+    setVendorConfirmation,
+  } = useAppStore();
+  const shareBridge = useShareBridge();
+  const [, setTick] = useState(0);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingItem, setEditingItem] = useState<WeddingTimelineItem | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -58,6 +77,27 @@ export default function WeddingDay() {
     responsibleType: 'both' as 'collaborator' | 'vendor' | 'both',
     vendorIds: [] as string[],
   });
+
+  useEffect(() => {
+    const interval = setInterval(() => setTick((t) => t + 1), 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const unsub = shareBridge.subscribe((e) => {
+      const d = e.detail;
+      if (d?.vendorId && d?.timelineItemId && d?.data) {
+        setVendorConfirmation(d.timelineItemId, d.vendorId, {
+          status: (d.data as Record<string, unknown>).status as VendorConfirmationStatus,
+          contactPerson: (d.data as Record<string, unknown>).contactPerson as string | undefined,
+          contactPhone: (d.data as Record<string, unknown>).contactPhone as string | undefined,
+          note: (d.data as Record<string, unknown>).note as string | undefined,
+        });
+      }
+      setTick((t) => t + 1);
+    });
+    return unsub;
+  }, [shareBridge, setVendorConfirmation]);
 
   if (!project) return null;
 
@@ -273,18 +313,64 @@ export default function WeddingDay() {
                         )}
                         {itemVendors.length > 0 && (
                           <div>
-                            <p className="text-xs text-text-muted mb-2">参与供应商</p>
-                            <div className="flex flex-wrap gap-2">
+                            <p className="text-xs text-text-muted mb-2">参与供应商及确认状态</p>
+                            <div className="space-y-2">
                               {itemVendors.map((v) => {
                                 const Icon = vendorCategoryIcons[v!.category];
+                                const conf = (item.vendorConfirmations || []).find(
+                                  (c) => c.vendorId === v!.id,
+                                );
+                                const bridge = shareBridge.getConfirmation(v!.id, item.id);
+                                const finalConf = bridge || conf;
+                                const status = (finalConf?.status || 'pending') as VendorConfirmationStatus;
+                                const isConfirmed = status === 'confirmed';
+                                const needsChanges = status === 'needs_changes';
                                 return (
                                   <div
                                     key={v!.id}
-                                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cream/50 border border-border"
-                                  >
-                                    <img src={v!.avatar} alt="" className="w-6 h-6 rounded-full object-cover" />
-                                    <Icon className="w-3.5 h-3.5 text-rose-gold" />
-                                    <span className="text-sm text-text-primary">{v!.name}</span>
+                                    className={cn(
+                                      'flex items-center justify-between px-3 py-2 rounded-lg border',
+                                      isConfirmed
+                                        ? 'bg-emerald-50/50 border-emerald-200'
+                                        : needsChanges
+                                          ? 'bg-amber-50/50 border-amber-200'
+                                          : 'bg-cream/30 border-border',
+                                    )}>
+                                    <div className="flex items-center gap-2">
+                                      <img src={v!.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
+                                      <Icon className="w-3.5 h-3.5 text-rose-gold" />
+                                      <div>
+                                        <span className="text-sm text-text-primary">{v!.name}</span>
+                                        <div className="flex items-center gap-2 text-[11px] text-text-muted">
+                                          {finalConf?.contactPerson && <span>联系人：{finalConf.contactPerson}</span>}
+                                          {finalConf?.contactPhone && <span>电话：{finalConf.contactPhone}</span>}
+                                        </div>
+                                        {finalConf?.note && (
+                                          <p className="text-[11px] text-text-muted mt-0.5">
+                                            <Info className="w-3 h-3 inline mr-0.5" />
+                                            {finalConf.note}
+                                          </p>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <span
+                                      className={cn(
+                                        'inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border font-medium',
+                                        isConfirmed
+                                          ? 'bg-emerald-500 text-white border-emerald-500'
+                                          : needsChanges
+                                            ? 'bg-amber-500 text-white border-amber-500'
+                                            : 'bg-white text-slate-600 border-slate-200',
+                                      )}>
+                                      {isConfirmed ? (
+                                        <CheckCircle className="w-3 h-3" />
+                                      ) : needsChanges ? (
+                                        <XCircle className="w-3 h-3" />
+                                      ) : (
+                                        <Edit3 className="w-3 h-3" />
+                                      )}
+                                      {VENDOR_CONFIRMATION_LABELS[status]}
+                                    </span>
                                   </div>
                                 );
                               })}
@@ -294,17 +380,35 @@ export default function WeddingDay() {
                       </div>
                     )}
 
-                    {/* Vendor quick tags */}
                     {itemVendors.length > 0 && !isExpanded && (
                       <div className="mt-3 flex flex-wrap gap-1.5">
                         {itemVendors.map((v) => {
                           const Icon = vendorCategoryIcons[v!.category];
+                          const conf = (item.vendorConfirmations || []).find((c) => c.vendorId === v!.id);
+                          const bridge = shareBridge.getConfirmation(v!.id, item.id);
+                          const finalConf = bridge || conf;
+                          const status = (finalConf?.status || 'pending') as VendorConfirmationStatus;
+                          const isConfirmed = status === 'confirmed';
+                          const needsChanges = status === 'needs_changes';
                           return (
                             <span
                               key={v!.id}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-gold/10 text-xs text-rose-gold-dark"
-                            >
-                              <Icon className="w-3 h-3" />
+                              className={cn(
+                                'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border',
+                                isConfirmed
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : needsChanges
+                                    ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                    : 'bg-rose-gold/10 text-rose-gold-dark border-rose-gold/20',
+                              )}
+                              title={finalConf?.note || VENDOR_CONFIRMATION_LABELS[status]}>
+                              {isConfirmed ? (
+                                <CheckCircle className="w-3 h-3" />
+                              ) : needsChanges ? (
+                                <XCircle className="w-3 h-3" />
+                              ) : (
+                                <Icon className="w-3 h-3" />
+                              )}
                               {v!.name.length > 8 ? v!.name.slice(0, 8) + '...' : v!.name}
                             </span>
                           );
@@ -565,25 +669,25 @@ export default function WeddingDay() {
                 <div className="flex-1 flex items-center gap-2 px-4 py-2.5 rounded-lg bg-border/40 border border-border">
                   <Link className="w-4 h-4 text-text-muted flex-shrink-0" />
                   <code className="text-xs text-text-secondary flex-1 truncate font-mono">
-                    {shareVendorId
-                      ? `${window.location.origin}/share/timeline?vendor=${shareVendorId}`
-                      : `${window.location.origin}/share/timeline`}
+                    {(() => {
+                      const link = generateTimelineShareLink(shareVendorId || undefined);
+                      return link || (shareVendorId ? `/share/timeline?vendor=${shareVendorId}` : '/share/timeline');
+                    })()}
                   </code>
                 </div>
                 <button
                   onClick={() => {
-                    const link = shareVendorId
-                      ? `${window.location.origin}/share/timeline?vendor=${shareVendorId}`
-                      : `${window.location.origin}/share/timeline`;
-                    navigator.clipboard?.writeText(link);
+                    const link = generateTimelineShareLink(shareVendorId || undefined);
+                    if (link) {
+                      navigator.clipboard?.writeText(link);
+                    }
                     setCopiedLink(true);
                     setTimeout(() => setCopiedLink(false), 2000);
                   }}
                   className={cn(
                     'btn-primary flex items-center gap-2',
                     copiedLink && '!bg-sage-green',
-                  )}
-                >
+                  )}>
                   {copiedLink ? (
                     <>
                       <Check className="w-4 h-4" />
@@ -598,7 +702,8 @@ export default function WeddingDay() {
                 </button>
               </div>
               <p className="text-xs text-text-muted text-center">
-                打开链接即可查看对应视角的婚礼流程单（支持新增/编辑环节后实时更新）
+                <Info className="w-3 h-3 inline mr-1" />
+                外发链接无需登录，数据已编码在URL中；新增/编辑环节后请重新复制最新链接
               </p>
             </div>
           </div>

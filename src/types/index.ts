@@ -49,6 +49,23 @@ export interface Vendor {
   contact: { phone: string; wechat?: string };
 }
 
+export type PaymentMethod = 'cash' | 'bank_transfer' | 'wechat' | 'alipay' | 'credit_card';
+
+export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
+  cash: '现金',
+  bank_transfer: '银行转账',
+  wechat: '微信支付',
+  alipay: '支付宝',
+  credit_card: '信用卡',
+};
+
+export interface PaymentRecord {
+  method?: PaymentMethod;
+  note?: string;
+  voucherImage?: string;
+  transactionId?: string;
+}
+
 export interface Payment {
   id: string;
   type: 'deposit' | 'midterm' | 'final';
@@ -56,6 +73,7 @@ export interface Payment {
   dueDate: string;
   paidAt?: string;
   status: 'pending' | 'paid' | 'overdue';
+  record?: PaymentRecord;
 }
 
 export interface ServiceContract {
@@ -138,6 +156,32 @@ export interface SeatTable {
   guestIds: string[];
 }
 
+export interface SeatingPlanVersion {
+  id: string;
+  projectId: string;
+  name: string;
+  createdAt: string;
+  tables: SeatTable[];
+  isActive: boolean;
+}
+
+export type VendorConfirmationStatus = 'pending' | 'confirmed' | 'needs_changes';
+
+export const VENDOR_CONFIRMATION_LABELS: Record<VendorConfirmationStatus, string> = {
+  pending: '待确认',
+  confirmed: '已确认',
+  needs_changes: '需调整',
+};
+
+export interface VendorConfirmation {
+  vendorId: string;
+  status: VendorConfirmationStatus;
+  confirmedAt?: string;
+  contactPerson?: string;
+  contactPhone?: string;
+  note?: string;
+}
+
 export interface WeddingTimelineItem {
   id: string;
   projectId: string;
@@ -148,6 +192,7 @@ export interface WeddingTimelineItem {
   responsibleIds: string[];
   responsibleType: 'collaborator' | 'vendor' | 'both';
   vendorIds?: string[];
+  vendorConfirmations?: VendorConfirmation[];
 }
 
 export type WeddingStyle = 'romantic' | 'modern' | 'vintage' | 'chinese' | 'outdoor';
